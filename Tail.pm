@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.85';
+$VERSION = '0.90';
 
 
 # Preloaded methods go here.
@@ -33,6 +33,15 @@ sub interval {
 	    $object->{interval}>$object->{maxinterval};
     }
     $object->{interval};
+}
+
+sub logit {
+    my $object=shift;
+    my @call=caller(1);
+    print STDERR 
+#	time()." ".
+	    $call[3]." ".$object->{"input"}." ".join("",@_)."\n"
+	if $object->debug;
 }
 
 sub adjustafter {
@@ -125,8 +134,8 @@ sub copy {
 
 sub tail {
     my $self=shift;
-    $self->{tail}=shift if @_;
-    return $self->{tail};
+    $self->{"tail"}=shift if @_;
+    return $self->{"tail"};
 }
 
 sub reset_tail {
@@ -198,7 +207,6 @@ sub GETC {
 sub DESTROY {
   my($this) = shift(@_);
   close($this->{"handle"});
-#  undef $this->[0];
   undef $this;
   return undef;
 }
@@ -223,7 +231,6 @@ sub new {
 	}
 	%params=@_;
     }
-#    my $object=$pkg->SUPER::new();
     my $object = {};
     bless $object,$pkg;
     unless (defined($params{'name'})) {
@@ -233,7 +240,6 @@ sub new {
     $object->input($params{'name'});
     $object->copy($params{'cname'});
     $object->method($params{'method'} || "tail");
-#    $object->buffer("");
     $object->{buffer}="";
     $object->maxinterval($params{'maxinterval'} || 60);
     $object->interval($params{'interval'} || 10);
@@ -243,11 +249,16 @@ sub new {
 			 ($object->maxinterval*$object->adjustafter));
     $object->{"debug"}=($params{'debug'} || 0);
     $object->{"tail"}=($params{'tail'} || 0);
-    $object->{"reset_tail"}=($params{'reset_tail'} || -1);
+    if (defined $params{'reset_tail'}) {
+        $object->{"reset_tail"} = $params{'reset_tail'};
+    } else {
+        $object->{"reset_tail"} =  -1;
+    }
     $object->{'ignore_nonexistant'}=($params{'ignore_nonexistant'} || 0);
-    $object->{lastread}=0;
+    $object->{"lastread"}=0;
+    $object->{"sleepcount"}=0;
+    $object->{"lastcheck"}=0;
     if ($object->{"method"} eq "tail") {
-#	reset_pointers($object);
 	$object->reset_pointers;
     }
     return $object;
@@ -255,15 +266,14 @@ sub new {
 
 sub position {
     my $object=shift;
-    unless ($object->{tail}) {
-	print "Start reading at end of file\n" if $object->{"debug"};
+    unless ($object->{"tail"}) {
+	$object->logit("Start reading at end of file");
 	$object->{curpos}=sysseek($object->{handle},0,SEEK_END);
-    } elsif ($object->{tail}<0) {
-	print "Start reading at start of file\n" if $object->{"debug"};
+    } elsif ($object->{"tail"}<0) {
+	$object->logit(" Start reading at start of file");
 	$object->{curpos}=sysseek($object->{handle},0,SEEK_START);
     } else {
-	print "Return ".$object->{"tail"}." lines.\n" 
-	    if $object->{"debug"};
+	$object->logit(" Return ".$object->{"tail"}." lines."); 
 	my $crs=0;
 	my $maxlen=sysseek($object->{handle},0,SEEK_END);
 	while ($crs<$object->{"tail"}+1) {
@@ -288,12 +298,12 @@ sub position {
 	    $object->{"buffer"}=substr($object->{"buffer"},$pos+1);
 	}
     }
-    $object->{tail}=$object->{reset_tail};
+    $object->{"tail"}=$object->{"reset_tail"};
 }
 
 sub reset_pointers {
     my $object=shift @_;
-    print "reseting after ".(time()-$object->{lastread})."s\n" if $object->{"debug"};
+    $object->logit("after ".(time()-$object->{lastread})."s\n");
 
     my $st;
 
@@ -312,53 +322,53 @@ sub reset_pointers {
 	# If file has not been changed since last OK read do not do anything
 	$st=stat($newhandle);
 	# lastread uses fractional time, stat doesn't. This can cause false
-        # negatives.
+        # negatives. 
+        # If the file was changed the same second as it was last read,
+        # we only reopen it if it's length has changed. The alternative is that
+        # sometimes, files would be reopened needlessly, and with reset_tail
+	# set to -1, we would see the whole file again.
+	# Of course, if the file was removed the same second as when it was
+        # last read, and replaced (within that second) with a file of equal
+        # length, we're out of luck. I don't see how to fix this.
 	if (($st->mtime<int($object->{lastread}))) {
-	    print "File not modified since last read. Reset skipped.\n" if $object->{"debug"};
+	    $object->logit(" File not modified since last read. Reset skipped.");
+	    $object->logit("mtime:",$st->mtime," lastread: ",$object->{lastread});
 	    return;
+	} elsif (($st->mtime==int($object->{lastread})) && 
+		 $st->size==$object->{"curpos"}) {
+	    $object->logit(" File not modified since last read. Reset skipped.");
+	    $object->logit("mtime:",$st->mtime," lastread: ",$object->{lastread});
+	    return;
+
 	}
 	$object->{handle}=$newhandle;
-                                             #file was created after last read
-#	if ($st->ctime>=int($object->{lastread}) or 
-#	    $st->size<$object->{curpos}) {    
-#	    $object->{curpos}=sysseek($object->{handle},0,SEEK_SET);
-#	    print "Setting pointer to start\n" if $object->{"debug"};
-#	} else {
-#	    $object->{curpos}=sysseek($object->{handle},0,SEEK_END);
-#	    print "Setting pointer to end of new file\n" if $object->{"debug"};
-#	}
 	$object->position;
 	close($oldhandle);
     } else {                  # This is the first time we are opening this file
+	$object->logit(" First opening of file");
 	$st=stat($newhandle);
 	$object->{handle}=$newhandle;
 	$object->position;
-#	$object->{lastread}=time;
 	$object->{lastread}=$st->mtime; # for better estimate on initial read
     }
     
-#    if (defined($object->{cname})) {
-#	return $!="Error opening ".$object->{cname}.": $!",undef 
-#	    unless open($object->{cname},">>".$object->{cname});
-#    }
 }
 
 
 sub checkpending {
    my $object=shift @_;
+
+   $object->{"lastcheck"}=time;
    unless ($object->{handle}) {
-       print "Trying to find previously nonexistant file\n" 
-	   if $object->{"debug"};
+       $object->logit(" Trying to find previously nonexistant file");
        $object->reset_pointers;
        unless ($object->{handle}) { # This try did not open the file either
-	   print "File does not yet exist\n" if $object->{"debug"};
+	   $object->logit(" File does not yet exist");
 	   return 0;
        }
    }
-   if ($object->{"debug"}) {
-       print "Checkpending position = ".$object->{curpos};
-       print " interval = ".$object->interval."\n";
-   }
+   $object->logit("position = ".$object->{curpos}." interval = "
+	 .$object->interval);
    
    my $endpos=sysseek($object->{handle},0,SEEK_END);
    if ($endpos<$object->{curpos}) { 
@@ -369,54 +379,126 @@ sub checkpending {
        $endpos=sysseek($object->{handle},0,SEEK_END);
    }
 
-#   my $endpos=sysseek($object->{handle},0,SEEK_END);
-#   if ($endpos<$object->{curpos}) { 
-#       $object->{curpos}=0;
-#   }
    if ($endpos-$object->{curpos}) {
        sysseek($object->{handle},$object->{curpos},SEEK_SET);
    }
+   $object->logit("Returning length is ".($endpos-$object->{curpos}));
    return ($endpos-$object->{curpos});
+}
+
+sub predict {
+    my $object=shift;
+    my $crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
+    my @call=caller(1);
+    $object->logit("called by ".join(" ",splice(@call,0,4)));
+    $object->logit("predict - $crs waiting in buffer");
+    return 0 if $crs;
+    my $ttw=($object->{"lastcheck"}+$object->{"interval"})-time();
+    $object->logit("- lastcheck:".$object->{"lastcheck"}."interval="
+	  .$object->{interval});
+    $object->logit("- ttw is $ttw");
+    return $ttw if $ttw>0;
+    if (my $len=$object->checkpending) {
+	readin($object,$len);
+	return 0;
+    }
+    if ($object->{"sleepcount"}>$object->adjustafter) {
+	$object->{"sleepcount"}=0;
+	$object->interval($object->interval*10);
+    }
+    $object->{"sleepcount"}++;
+    $object->logit("- checkpending returned 0 - (".$object->interval.",".
+	  $object->{"sleepcount"}.")");
+    return ($object->interval);
+}
+
+sub select {
+    my $object=shift @_; # the first objec is mostly irrelevant here...
+    my ($timeout,@fds)=splice(@_,3);
+    my ($minpred,$mustreturn);
+    if (defined($timeout)) {
+	$minpred=$timeout;
+	$mustreturn=time()+$timeout;
+    } else {
+	$minpred=$fds[0]->predict;
+    }
+    foreach (@fds) {
+	my $val=$_->predict;
+	$object->logit("minpred calc 1 ($minpred,$val)");
+	$minpred=$val if $minpred>$val;
+    }
+    my ($nfound,$timeleft);
+    my @retarr;
+    while (defined($timeout)?(!$nfound && (time()<$mustreturn)):!$nfound) {
+	$object->logit("Calling select with a wait of $minpred");
+	($nfound,$timeleft)=select($_[0],$_[1],$_[2],$minpred);
+	if (defined($timeout)) {
+	    $minpred=$timeout;
+	} else {
+	    $minpred=$fds[0]->predict;
+	}
+	undef @retarr;
+	foreach (@fds) {
+	    my $val=$_->predict;
+	    $nfound++ unless $val;
+	    $object->logit("minpred calc 2 ($minpred,$val)");
+	    $minpred=$val if $minpred>$val;
+	    push(@retarr,$_);
+	}
+    }
+    if (wantarray) {
+	return ($nfound,$timeleft,@retarr);
+    } else {
+	return $nfound;
+    }
+}
+
+sub readin {
+    my $crs;
+    my ($object,$len)=@_;
+    if (length($object->{"buffer"})) {
+	# this means the file was reset AND a tail -n was active
+	$crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
+	return $crs if $crs;
+    }
+    my $nlen=$len;
+    while ($nlen>0) {
+	$len=sysread($object->{handle},$object->{"buffer"},
+		     $nlen,length($object->{"buffer"}));
+	$nlen=$nlen-$len;
+    }
+    $object->{curpos}=sysseek($object->{handle},
+			      $object->{curpos}+$len,SEEK_SET);
+    
+    $crs=$object->{"buffer"}=~tr/\n//;
+    $object->logit(" Got something ($len). there are now $crs newlines in buffer (".
+		   length($object->{"buffer"})." bytes)");
+    
+    if ($crs) {
+	my $tmp=time; 
+	$object->interval(($tmp-($object->{lastread}))/$crs);
+	$object->{lastread}=$tmp;
+    }
+    return ($crs);
 }
 
 sub read {
     my $object=shift @_;
     my $len;
-    my $cnt;
     my $crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
-    print "read - $crs waiting in buffer\n" if $object->{"debug"};
+    $object->logit("- $crs waiting in buffer");
     while (!$crs) {
-	print "Reading loop entered\n" if $object->{"debug"};
-	$cnt=0;
+	$object->logit(" Reading loop entered");
+	$object->{"sleepcount"}=0;
 	while (!($len=$object->checkpending) && !length($object->{"buffer"})) {
 	    return "" if $object->nowait;
 	    sleep($object->interval);               # maybe should be adjusted?
-	    if ($cnt++>$object->adjustafter) {
-		$cnt=0;
+	    if ($object->{"sleepcount"}++>$object->adjustafter) {
+		$object->{"sleepcount"}=0;
 		$object->interval($object->interval*10);
 	    }
 	}
-	if (length($object->{"buffer"})) {
-	    # this means the file was reset AND a tail -n was active
-	    $crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
-	    next if $crs;
-	}
-	$len=sysread($object->{handle},$object->{"buffer"},
-		$len,length($object->{"buffer"}));
-	$object->{curpos}=sysseek($object->{handle},
-				  $object->{curpos}+$len,SEEK_SET);
-    
-	$crs=$object->{"buffer"}=~tr/\n//;
-	if ($object->{"debug"}) {
-	    print "Got something ($len). there are now $crs newlines in buffer (";
-	    print length($object->{"buffer"})." bytes)\n";
-	}
-
-	next unless $crs;
-#    $object->{interval}=(time-$object->{lastread})/$crs;
-	my $tmp=time; 
-	$object->interval(($tmp-($object->{lastread}))/$crs);
-	$object->{lastread}=$tmp;
+	next if $crs=readin($object,$len);
     }
     unless (wantarray) {
 	my $str=substr($object->{"buffer"},0,
@@ -425,9 +507,6 @@ sub read {
 				   1+index($object->{"buffer"},"\n"));
 	return $str;
     } else {
-#	my @str=split(/\n/,$object->{"buffer"});
-#	$object->{"buffer"}="";
-#	return(@str);
 	my @str;
 	while (index($object->{"buffer"},"\n")>-1) {
 	    push(@str,substr($object->{"buffer"},0,
@@ -442,7 +521,6 @@ sub read {
 
 1;
 __END__
-# Below is the stub of documentation for your module. You better edit it!
 
 =head1 NAME
 
@@ -477,6 +555,13 @@ to the file, it will simply block.
 
 You can find more synopsii in the file logwatch, which is included
 in the distribution.
+
+Note: Select functionality was added in version 0.9, and it required 
+some reworking of all routines. ***PLEASE*** let me know if you see anything
+strange happening. 
+
+You can find two way of using select in the file select_demo which is included
+in the ditribution.
 
 =head1 DESCRIPTION
 
@@ -612,16 +697,47 @@ Default is die.
 C<read> returns one line from the input file. If there are no lines
 ready, it blocks until there are.
 
+=head2 select
+
+C<select> is intended to enable the programmer to simoultaneously wait for
+input on normal filehandles and File::Tail filehandles. Of course, you may 
+use to simply read from more than one File::Tail filehandle at a time.
+
+Look at the script select_demo for usage.
+
+Basicaly, you call File::Tail::select just as you would normal select,
+with fields for rbits, wbits and ebits, as well as a timeout, however, you 
+can tack any number of File::Tail objects (not File::Tail filehandles!) 
+to the end. 
+
+When you do this, File::Tail's select emulates normal select, with two 
+exceptions: 
+
+a) it will return if there is input on any of the parameters
+(i.e. normal filehandles) _or_ File::Tails.
+
+b) In addition to C<($nfound, $timeleft)>, the return array will also contain
+a list of File::Tail objects which are ready for reading. C<$nfound> will
+contain the correct number of filehandles to be read (i.e. both normal 
+and File::Tails). 
+
+Once select returns, when you want to determine which File::Tail objects
+have input ready, you can either use the list of objects select returned,
+or you can check each individual object with $object->predict. This returns
+the ammount of time (in fractional seconds) after which the handle expects
+input. If it returns 0, there is input waiting. There is no guarantee that
+there will be input waiting after the returned number of seconds has passed.
+However, File::Tail won't do any I/O on the file until that time has passed. 
+
+Also note, if you are determining which files are ready for input by calling
+each individual predict, the C<$nfound> value may be invalid, because one
+or more of File::Tail object may have become ready between the time select
+has returned and the time when you checked it.
+
 =head1 TO BE DONE
 
-The next version will support some form of "select" call, which will
-make it possible to read from several File::Tail files at once, as well
-as reading from sockets and File::Tail files without polling.
-
-Also planned for 0.8: tail C<-n> functionality, using $/ instead of \n to
+Planned for 0.95-1.0: Using $/ instead of \n to
 separate "lines" (which should make it possible to read wtmp type files).
-
-Tests should be devised and put into test.pl.
 
 =head1 AUTHOR
 

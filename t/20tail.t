@@ -1,7 +1,7 @@
 use File::Tail;
 $| = 1; print "1..7\n";
 
-$debug=1;
+$debug=0;
 
 ######################### End of black magic.
 

@@ -4,7 +4,7 @@ use File::Tail;
 $loaded = 1;
 print "ok 1\n";
 
-$debug=1;
+$debug=0;
 
 ######################### End of black magic.
 

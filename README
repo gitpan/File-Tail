@@ -1,12 +1,12 @@
-The File::Tail package is designed for reading files which are continously
+The File::Tail module is designed for reading files which are continously
 appended to (the name comes from the tail -f directive). Usualy such files are
 logfiles of some description.
 
-The package tries not to busy wait on the file, dynamicaly calcultaing 
+The module tries hard not to busy wait on the file, dynamicaly calcultaing 
 how long it should wait before it pays to try reading the file again.
 
-The package should handle normal log truncations ("close; move; open"
-or "cat /dev/null >file") transparently. 
+The module should handle normal log truncations ("close; move; open"
+or "cat /dev/null >file") transparently, without losing any input.
 
 Currently this package requires Time::HiRes, because it often needs to sleep
 for less than one second. (I don't beleive one should busy wait on a file
@@ -22,8 +22,14 @@ A feature added in 0.81 is tail -n functionality: you can demand to read the
 last n lines, reading from the current end of file, or reading from the start
 of file.
 
-A future version will include a select equivalnet.
+Select was added in version 0.9. It allows you to simoultaneously read from
+several File::Tail objects at the same time, while also reading from pipes.
+This is a new implementation, so if you notice any bugs, please let me know.
 
+NOTE: Select functionality is currently experimental. Consider this a public 
+beta. If you notice any new problems, let me know. I will also entertain 
+suggestions for changes in the select interface - but only until I release
+the next version.
 
 To build this module, enter
 perl Makefile.PL
@@ -31,10 +37,9 @@ make
 make test
 make install
 
-
 If you have any problems, contact me at matija.grabnar@arnes.si
 
-Copyright (c) 1997 Matija Grabnar. 
+Copyright (c) 1997,1998,1999 Matija Grabnar. 
 
 All rights reserved. This program is free software; you can
 redistribute it and/or modify it under the same terms as Perl itself. 

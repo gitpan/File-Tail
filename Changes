@@ -35,3 +35,11 @@ Revision history for Perl extension File::Tail.
 	The introduction of tail -n broke the handling of files where 
 	a line might be written incompletely (e.g. without the final \n). OOps!
 
+0.90    Tue Nov 10 11:02:35 MET 1998
+	fix for reset_tail (it couldn't be set to 0) from 
+	   Chris_Heller/PeopleSoft@peoplesoft.com
+	fixed some -> references which complained in Perl5.4 but not in 5.5
+        moved debugging statement to a separate routine, logit
+        logit now outputs the name of the calling routine and the name of the
+           file the object refers to.
+        select functionality added. 
