@@ -76,3 +76,6 @@ Revision history for Perl extension File::Tail.
 	added binmode to improve running on Microsoft platforms
         added a check in DESTROY to avoid a warning in Perl 5.6
         fixed prerequisites in Makefile.PL
+
+0.97	Persistent "go wild after log rotation, but only sometimes" bug
+        perhaps eliminated.

@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.96';
+$VERSION = '0.97';
 
 
 # Preloaded methods go here.
@@ -346,30 +346,31 @@ sub reset_pointers {
 	# Of course, if the file was removed the same second as when it was
         # last read, and replaced (within that second) with a file of equal
         # length, we're out of luck. I don't see how to fix this.
-	if (($st->mtime<int($object->{lastread}))) {
+	if ($st->mtime<=int($object->{'lastread'})) {
 	    $object->logit(" File not modified since last read. Reset skipped.");
 	    $object->logit("mtime:",$st->mtime," lastread: ",$object->{lastread});
- 	    $object->{lastread} = $st->mtime; # repair fraction trouble
-	    return;
-	} elsif (($st->mtime==int($object->{lastread})) && 
-		 $st->size==$object->{"curpos"}) {
-	    $object->logit(" File not modified since last read. Reset skipped.");
-	    $object->logit("mtime:",$st->mtime," lastread: ",$object->{lastread});
- 	    $object->{lastread} = $st->mtime; # repair fraction trouble
-	    return;
-
+	    if ($st->size==$object->{"curpos"}) {
+		$object->{lastread} = $st->mtime; 
+		return;
+	    } else { 
+		$object->logit("Mtime is old (mtime:".$st->mtime." lastread ".$object->{'lastread'}."), but size is not equal to position, therefore reset!");
+		$object->logit("Size :".$st->size." position: ".$object->{'position'});
+		# will continue further to reset
+	    }
+	} else {
+	    $object->logit("considered skipping reset, but did not file mtime:",$st->mtime," lastread: ",$object->{lastread}," size=",$st->size," read position=",$object->{"curpos"});
 	}
 	$object->logit("reseting file mtime:",$st->mtime," lastread: ",$object->{lastread}," size=",$st->size," read position=",$object->{"curpos"});
 	$object->{handle}=$newhandle;
 	$object->position;
-#	$object->{lastread} = $st->mtime; # repair fraction trouble
+	$object->{lastread} = $st->mtime;
 	close($oldhandle);
     } else {                  # This is the first time we are opening this file
 	$object->logit(" First opening of file");
 	$st=stat($newhandle);
 	$object->{handle}=$newhandle;
 	$object->position;
-#	$object->{lastread}=$st->mtime; # for better estimate on initial read
+	$object->{lastread}=$st->mtime; # for better estimate on initial read
     }
     
 }

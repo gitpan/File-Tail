@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.96';
+$VERSION = '0.97';
 
 
 # Preloaded methods go here.
@@ -342,24 +342,24 @@ sub reset_pointers {
 	# Of course, if the file was removed the same second as when it was
         # last read, and replaced (within that second) with a file of equal
         # length, we're out of luck. I don't see how to fix this.
-	if (($st->mtime<int($object->{lastread}))) {
- 	    $object->{lastread} = $st->mtime; # repair fraction trouble
-	    return;
-	} elsif (($st->mtime==int($object->{lastread})) && 
-		 $st->size==$object->{"curpos"}) {
- 	    $object->{lastread} = $st->mtime; # repair fraction trouble
-	    return;
-
+	if ($st->mtime<=int($object->{'lastread'})) {
+	    if ($st->size==$object->{"curpos"}) {
+		$object->{lastread} = $st->mtime; 
+		return;
+	    } else { 
+		# will continue further to reset
+	    }
+	} else {
 	}
 	$object->{handle}=$newhandle;
 	$object->position;
-#	$object->{lastread} = $st->mtime; # repair fraction trouble
+	$object->{lastread} = $st->mtime;
 	close($oldhandle);
     } else {                  # This is the first time we are opening this file
 	$st=stat($newhandle);
 	$object->{handle}=$newhandle;
 	$object->position;
-#	$object->{lastread}=$st->mtime; # for better estimate on initial read
+	$object->{lastread}=$st->mtime; # for better estimate on initial read
     }
     
 }
