@@ -71,3 +71,8 @@ Revision history for Perl extension File::Tail.
         I couldn't get Pause to recognise that 0.94 was newer than 0.91 for
 	some reason. I added Tail.pm back into the manifest to see if that
 	will help.
+
+0.96	Mon May 29 09:33:27 MET DST 2000
+	added binmode to improve running on Microsoft platforms
+        added a check in DESTROY to avoid a warning in Perl 5.6
+        fixed prerequisites in Makefile.PL

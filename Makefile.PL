@@ -40,6 +40,7 @@ chk_version("Time::HiRes",1.12) or
 	 "version 1.12 or later, \n".
 	 "available from CPAN/modules/by-module/Time/Time-HiRes-x.x.tar.gz\n");
 
+
 my $i=0;
 my $debug=0; 
 while (defined($ARGV[$i])) {
@@ -77,6 +78,10 @@ if ($debug) {
 WriteMakefile(
 	      'NAME'	=> 'File::Tail',
 	      'VERSION_FROM' => 'Tail.pm.debug', # finds $VERSION
+	      'PREREQ_PM' => { "FileHandle"=>0, 
+                               "File::stat"=>0, 
+                               "IO::Seekable"=>0, 
+                               "Time::HiRes"=>1.12
+                             },
 #	      'NOECHO' => "",
-	      'PREREQ_PM' => \%prereq
 );

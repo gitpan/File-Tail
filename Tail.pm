@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.95';
+$VERSION = '0.96';
 
 
 # Preloaded methods go here.
@@ -208,9 +208,9 @@ sub GETC {
 }
 
 sub DESTROY {
-  my($this) = shift(@_);
-  close($this->{"handle"});
-  undef $this;
+  my($this) = $_[0];
+  close($this->{"handle"}) if (defined($this) && defined($this->{'handle'}));
+#  undef $_[0];
   return;
 }
 
@@ -321,11 +321,14 @@ sub reset_pointers {
 
     unless (open($newhandle,"<".$object->input)) {
 	if ($object->{'ignore_nonexistant'}) {
+	    $object->{'endpos'}=0;
+	    $object->{'curpos'}=0;
 	    return;
 	}
 	$object->error("Error opening ".$object->input.": $!");
 	return;
     }
+    binmode($newhandle);
     
     if (defined($oldhandle)) {
 	# If file has not been changed since last OK read do not do anything
