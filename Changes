@@ -78,4 +78,8 @@ Revision history for Perl extension File::Tail.
         fixed prerequisites in Makefile.PL
 
 0.97	Persistent "go wild after log rotation, but only sometimes" bug
-        perhaps eliminated.
+        perhaps eliminated. Thanks elfchief@lupine.org for making a script 
+        that triggered the previously interminent problem every time.
+
+0.98    David Pfitzner release - David send me 6 patches (some for bugs,
+        others for inefficiencies, or lack of clarity in documents)

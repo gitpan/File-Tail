@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.97';
+$VERSION = '0.98';
 
 
 # Preloaded methods go here.
@@ -270,6 +270,10 @@ sub new {
     return $object;
 }
 
+# Sets position in file when first opened or after that when reset:
+# Sets {endpos} and {curpos} for current {handle} based on {tail}.
+# Sets {tail} to value of {reset_tail}; effect is that first call 
+# uses {tail} and subsequent calls use {reset_tail}.
 sub position {
     my $object=shift;
     $object->{"endpos"}=sysseek($object->{handle},0,SEEK_END);
@@ -310,6 +314,16 @@ sub position {
     $object->{"tail"}=$object->{"reset_tail"};
 }
 
+# Tries to open or reopen the file; failure is an error unless 
+# {ignore_nonexistant} is set. 
+# 
+# For a new file (ie, first time opened) just does some book-keeping 
+# and calls position for initial position setup.  Otherwise does some 
+# checks whether file has been replaced, and if so changes to the new 
+# file.  (Calls position for reset setup).
+#
+# Always updates {lastreset} to current time.
+#
 sub reset_pointers {
     my $object=shift @_;
     $object->{lastreset} = time();
@@ -321,8 +335,14 @@ sub reset_pointers {
 
     unless (open($newhandle,"<".$object->input)) {
 	if ($object->{'ignore_nonexistant'}) {
-	    $object->{'endpos'}=0;
-	    $object->{'curpos'}=0;
+            # If we have an oldhandle, leave endpos and curpos to what they 
+	    # were, since oldhandle will still be the "current" handle elsewhere, 
+	    # eg, checkpending.  This also allows tailing a file which is removed 
+	    # but still being written to.
+            if (!$oldhandle) {
+                $object->{'endpos'}=0;
+                $object->{'curpos'}=0;
+            }
 	    return;
 	}
 	$object->error("Error opening ".$object->input.": $!");
@@ -379,7 +399,7 @@ sub checkpending {
    
    $object->{"endpos"}=sysseek($object->{handle},0,SEEK_END);
    if ($object->{"endpos"}<$object->{curpos}) {  # file was truncated
-       $object->{curpos}=sysseek($object->{handle},0,SEEK_SET);
+       $object->position;
    } elsif (($object->{curpos}==$object->{"endpos"}) 
 	       && (time()-$object->{lastreset})>$object->{'resetafter'}) {
        $object->reset_pointers;
@@ -495,7 +515,7 @@ sub read {
     my $object=shift @_;
     my $len;
     my $pending=$object->{"endpos"}-$object->{"curpos"};
-    my $crs=$object->{"buffer"}=~tr/\n//;
+    my $crs=$object->{"buffer"}=~m/\n/;
     while (!$pending && !$crs) {
 	$object->{"sleepcount"}=0;
 	while ($object->predict) {
@@ -509,7 +529,7 @@ sub read {
 	    sleep($object->interval);
 	}
 	$pending=$object->{"endpos"}-$object->{"curpos"};
-	$crs=$object->{"buffer"}=~tr/\n//;
+	$crs=$object->{"buffer"}=~m/\n/;
     }
     
     if (!length($object->{"buffer"}) || index($object->{"buffer"},"\n")<0) {
@@ -653,13 +673,17 @@ adjustafter*maxinterval.
 =item maxbuf
 
 The maximum size of the internal buffer. When File::Tail
-suddenly found an enormous ammount information in the file
+suddenly found an enormous ammount of information in the file
 (for instance if the retry parameters were set to very
 infrequent checking and the file was rotated), File::Tail
 sometimes slurped way too much file into memory.  This sets
 the maximum size of File::Tail's buffer.
 
 Default value is 16384 (bytes).
+
+A large internal buffer may result in worse performance (as well as
+increased memory usage), since File::Tail will have to do more work
+processing the internal buffer.
 
 =item nowait
 
