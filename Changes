@@ -67,3 +67,7 @@ Revision history for Perl extension File::Tail.
            the do a perl Makefile.PL which will create a Tail.pm
 	Select returned ALL handles instead of just the ones with input ready.
 
+0.95	Thu Dec  9 10:25:47 MET 1999
+        I couldn't get Pause to recognise that 0.94 was newer than 0.91 for
+	some reason. I added Tail.pm back into the manifest to see if that
+	will help.

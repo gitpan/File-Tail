@@ -274,15 +274,12 @@ sub position {
     my $object=shift;
     $object->{"endpos"}=sysseek($object->{handle},0,SEEK_END);
     unless ($object->{"tail"}) {
-	$object->logit("Start reading at end of file");
 	$object->{endpos}=$object->{curpos}=
 	    sysseek($object->{handle},0,SEEK_END);
     } elsif ($object->{"tail"}<0) {
-	$object->logit(" Start reading at start of file");
 	$object->{endpos}=sysseek($object->{handle},0,SEEK_END);
 	$object->{curpos}=sysseek($object->{handle},0,SEEK_SET);
     } else {
-	$object->logit(" Return ".$object->{"tail"}." lines."); 
 	my $crs=0;
 	my $maxlen=sysseek($object->{handle},0,SEEK_END);
 	while ($crs<$object->{"tail"}+1) {
@@ -316,7 +313,6 @@ sub position {
 sub reset_pointers {
     my $object=shift @_;
     $object->{lastreset} = time();
-    $object->logit("after ".($object->{lastreset}-$object->{lastcheck})."s");
 
     my $st;
 
@@ -344,25 +340,19 @@ sub reset_pointers {
         # last read, and replaced (within that second) with a file of equal
         # length, we're out of luck. I don't see how to fix this.
 	if (($st->mtime<int($object->{lastread}))) {
-	    $object->logit(" File not modified since last read. Reset skipped.");
-	    $object->logit("mtime:",$st->mtime," lastread: ",$object->{lastread});
  	    $object->{lastread} = $st->mtime; # repair fraction trouble
 	    return;
 	} elsif (($st->mtime==int($object->{lastread})) && 
 		 $st->size==$object->{"curpos"}) {
-	    $object->logit(" File not modified since last read. Reset skipped.");
-	    $object->logit("mtime:",$st->mtime," lastread: ",$object->{lastread});
  	    $object->{lastread} = $st->mtime; # repair fraction trouble
 	    return;
 
 	}
-	$object->logit("reseting file mtime:",$st->mtime," lastread: ",$object->{lastread}," size=",$st->size," read position=",$object->{"curpos"});
 	$object->{handle}=$newhandle;
 	$object->position;
 #	$object->{lastread} = $st->mtime; # repair fraction trouble
 	close($oldhandle);
     } else {                  # This is the first time we are opening this file
-	$object->logit(" First opening of file");
 	$st=stat($newhandle);
 	$object->{handle}=$newhandle;
 	$object->position;
@@ -378,19 +368,14 @@ sub checkpending {
    my $old_lastcheck = $object->{lastcheck};
    $object->{"lastcheck"}=time;
    unless ($object->{handle}) {
-       $object->logit(" Trying to find previously nonexistant file");
        $object->reset_pointers;
        unless ($object->{handle}) { # This try did not open the file either
-	   $object->logit(" File does not yet exist");
 	   return 0;
        }
    }
-   $object->logit("position = ".$object->{curpos}." interval = ".$object->interval);
    
    $object->{"endpos"}=sysseek($object->{handle},0,SEEK_END);
-   $object->logit("endposition = ".$object->{curpos});
    if ($object->{"endpos"}<$object->{curpos}) {  # file was truncated
-       logit($object,"File was truncated - reading from start");
        $object->{curpos}=sysseek($object->{handle},0,SEEK_SET);
    } elsif (($object->{curpos}==$object->{"endpos"}) 
 	       && (time()-$object->{lastreset})>$object->{'resetafter'}) {
@@ -402,7 +387,6 @@ sub checkpending {
        sysseek($object->{handle},$object->{curpos},SEEK_SET);
        readin($object,$object->{"endpos"}-$object->{curpos});
    }
-   $object->logit("Returning length is ".($object->{"endpos"}-$object->{curpos}));
    return ($object->{"endpos"}-$object->{curpos});
 }
 
@@ -410,12 +394,8 @@ sub predict {
     my $object=shift;
     my $crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
     my @call=caller(1);
-    $object->logit("called by ".join(" ",splice(@call,0,4)));
-    $object->logit("predict - $crs waiting in buffer");
     return 0 if $crs;
     my $ttw=$object->{"nextcheck"}-time();
-    $object->logit("- lastcheck:".$object->{"lastcheck"}."interval=".$object->{"interval"});
-    $object->logit("- ttw is $ttw");
     return $ttw if $ttw>0;
     if (my $len=$object->checkpending) {
 	readin($object,$len);
@@ -426,7 +406,6 @@ sub predict {
 	$object->interval($object->interval*10);
     }
     $object->{"sleepcount"}++;
-    $object->logit("- checkpending returned 0 - (".$object->interval.",".$object->{"sleepcount"}.")");
     $object->{"nextcheck"}=time()+$object->interval;
     return ($object->interval);
 }
@@ -450,7 +429,6 @@ sub select {
     }
     foreach (@fds) {
 	my $val=$_->predict;
-	$object->logit("minpred calc 1 ($minpred,$val)");
 	$minpred=$val if $minpred>$val;
     }
     my ($nfound,$timeleft);
@@ -459,11 +437,9 @@ sub select {
 # Restore bitmaps in case we called select before
 	splice(@_,0,3,$savein,$saveout,$saveerr);
 
-	$object->logit("calling select(".bitprint($_[0]).",".bitprint($_[1]).",".bitprint($_[2]).",$minpred)\n");
 
 	($nfound,$timeleft)=select($_[0],$_[1],$_[2],$minpred);
 
-	$object->logit("returning ($nfound,$timeleft)=select(".bitprint($_[0]).",".bitprint($_[1]).",".bitprint($_[2]).",$minpred)\n");
 
 	if (defined($timeout)) {
 	    $minpred=$timeout;
@@ -474,7 +450,6 @@ sub select {
 	foreach (@fds) {
 	    my $val=$_->predict;
 	    $nfound++ unless $val;
-	    $object->logit("minpred calc 2 ($minpred,$val)");
 	    $minpred=$val if $minpred>$val;
 	    push(@retarr,$_) unless $val;
 	}
@@ -489,15 +464,12 @@ sub select {
 sub readin {
     my $crs;
     my ($object,$len)=@_;
-    logit($object,"Readin, len=$len");
     if (length($object->{"buffer"})) {
 	# this means the file was reset AND a tail -n was active
 	$crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
-	logit($object,"buffer already contains $crs lines ",length($object->{"buffer"})," bytes");
 	return $crs if $crs;
     }
     $len=$object->{"maxbuf"} if ($len>$object->{"maxbuf"});
-    logit($object,"Preparing to read in $len bytes");
     my $nlen=$len;
     while ($nlen>0) {
 	$len=sysread($object->{handle},$object->{"buffer"},
@@ -507,7 +479,6 @@ sub readin {
     $object->{curpos}=sysseek($object->{handle},0,SEEK_CUR);
     
     $crs=$object->{"buffer"}=~tr/\n//;
-    $object->logit(" Got something ($len). there are now $crs newlines in buffer (".length($object->{"buffer"})." bytes)");
     
     if ($crs) {
 	my $tmp=time; 
@@ -521,10 +492,8 @@ sub read {
     my $object=shift @_;
     my $len;
     my $pending=$object->{"endpos"}-$object->{"curpos"};
-    $object->logit("- $pending bytes unread in file");
     my $crs=$object->{"buffer"}=~tr/\n//;
     while (!$pending && !$crs) {
-	$object->logit(" Reading loop entered");
 	$object->{"sleepcount"}=0;
 	while ($object->predict) {
 	    if ($object->nowait) {
@@ -541,10 +510,8 @@ sub read {
     }
     
     if (!length($object->{"buffer"}) || index($object->{"buffer"},"\n")<0) {
-	logit($object,"reading loop finished. ($pending pending) Calling readin");
 	readin($object,$pending);
     }
-    logit($object,"Buffer now contains ",length($object->{"buffer"})," bytes");
     unless (wantarray) {
 	my $str=substr($object->{"buffer"},0,
 		       1+index($object->{"buffer"},"\n"));
