@@ -9,16 +9,21 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.70';
+$VERSION = '0.80';
 
 
 # Preloaded methods go here.
 
 use FileHandle;
-use IO::Seekable;
+#use IO::Seekable; # does not define SEEK_SET in 5005.02
 use File::stat;
 use Carp;
 use Time::HiRes qw ( time sleep ); #import hires microsecond timers
+
+sub SEEK_SET {0;}
+sub SEEK_START {1;}
+sub SEEK_END {2;}
+
 
 sub interval {
     my $object=shift @_;
@@ -41,7 +46,6 @@ sub debug {
     $self->{"debug"}=shift if @_;
     return $self->{"debug"};
 }
-
 
 sub errmode {
     my($self, $mode) = @_;
@@ -119,6 +123,18 @@ sub copy {
     return $self->{copy};
 }
 
+sub tail {
+    my $self=shift;
+    $self->{tail}=shift if @_;
+    return $self->{tail};
+}
+
+sub reset_tail {
+    my $self=shift;
+    $self->{reset_tail}=shift if @_;
+    return $self->{reset_tail};
+}
+
 sub nowait {
     my $self=shift;
     $self->{nowait}=shift if @_;
@@ -181,9 +197,14 @@ sub GETC {
 
 sub DESTROY {
   my($this) = shift(@_);
-  undef $this->[0];
+  close($this->{"handle"});
+#  undef $this->[0];
   undef $this;
   return undef;
+}
+
+sub CLOSE {
+    &DESTROY(@_);
 }
 
 sub new {
@@ -221,6 +242,8 @@ sub new {
     $object->resetafter($params{'resetafter'} || 
 			 ($object->maxinterval*$object->adjustafter));
     $object->{"debug"}=($params{'debug'} || 0);
+    $object->{"tail"}=($params{'tail'} || 0);
+    $object->{"reset_tail"}=($params{'reset_tail'} || -1);
     $object->{'ignore_nonexistant'}=($params{'ignore_nonexistant'} || 0);
     $object->{lastread}=0;
     if ($object->{"method"} eq "tail") {
@@ -228,6 +251,43 @@ sub new {
 	$object->reset_pointers;
     }
     return $object;
+}
+
+sub position {
+    my $object=shift;
+    unless ($object->{tail}) {
+	print "Start reading at end of file\n" if $object->{"debug"};
+	$object->{curpos}=sysseek($object->{handle},0,SEEK_END);
+    } elsif ($object->{tail}<0) {
+	print "Start reading at start of file\n" if $object->{"debug"};
+	$object->{curpos}=sysseek($object->{handle},0,SEEK_START);
+    } else {
+	print "Return ".$object->{"tail"}." lines.\n" 
+	    if $object->{"debug"};
+	my $crs=0;
+	my $maxlen=sysseek($object->{handle},0,SEEK_END);
+	while ($crs<$object->{"tail"}+1) {
+	    my $avlen=length($object->{"buffer"})/($crs+1);
+	    $avlen=80 unless $avlen;
+	    my $calclen=$avlen*$object->{"tail"};
+	    $calclen=$maxlen if $calclen>$maxlen;
+	    $object->{curpos}=sysseek($object->{handle},-$calclen,SEEK_END);
+	    sysread($object->{handle},$object->{"buffer"},
+		    $calclen);
+	    $crs=$object->{"buffer"}=~tr/\n//;
+	    last if ($calclen>=$maxlen);
+	}
+	if ($crs>$object->{"tail"}) {
+	    my $toskip=$crs-$object->{"tail"};
+	    my $pos;
+	    $pos=index($object->{"buffer"},"\n");
+	    while (--$toskip) {
+		$pos=index($object->{"buffer"},"\n",$pos+1);
+	    }
+	    $object->{"buffer"}=substr($object->{"buffer"},$pos+1);
+	}
+    }
+    $object->{tail}=$object->{reset_tail};
 }
 
 sub reset_pointers {
@@ -250,22 +310,28 @@ sub reset_pointers {
     if (defined($oldhandle)) {
 	# If file has not been changed since last OK read do not do anything
 	$st=stat($newhandle);
-	if (($st->mtime<$object->{lastread})) {
+	# lastread uses fractional time, stat doesn't. This can cause false
+        # negatives.
+	if (($st->mtime<int($object->{lastread}))) {
 	    print "File not modified since last read. Reset skipped.\n" if $object->{"debug"};
 	    return;
 	}
 	$object->{handle}=$newhandle;
-	if ($st->ctime<$object->{lastread} or
-	    $st->size<$object->{curpos}) {
-	    $object->{curpos}=sysseek($object->{handle},0,SEEK_SET);
-	} else {
-	    $object->{curpos}=sysseek($object->{handle},0,SEEK_END);
-	}
+                                             #file was created after last read
+#	if ($st->ctime>=int($object->{lastread}) or 
+#	    $st->size<$object->{curpos}) {    
+#	    $object->{curpos}=sysseek($object->{handle},0,SEEK_SET);
+#	    print "Setting pointer to start\n" if $object->{"debug"};
+#	} else {
+#	    $object->{curpos}=sysseek($object->{handle},0,SEEK_END);
+#	    print "Setting pointer to end of new file\n" if $object->{"debug"};
+#	}
+	$object->position;
 	close($oldhandle);
-    } else {
+    } else {                  # This is the first time we are opening this file
 	$st=stat($newhandle);
 	$object->{handle}=$newhandle;
-	$object->{curpos}=sysseek($object->{handle},0,SEEK_END);
+	$object->position;
 #	$object->{lastread}=time;
 	$object->{lastread}=$st->mtime; # for better estimate on initial read
     }
@@ -299,6 +365,7 @@ sub checkpending {
    } elsif (($object->{curpos}==$endpos) 
 	       && (time()-$object->{'lastread'})>$object->{'resetafter'}) {
        $object->reset_pointers;
+       $endpos=sysseek($object->{handle},0,SEEK_END);
    }
 
 #   my $endpos=sysseek($object->{handle},0,SEEK_END);
@@ -320,13 +387,18 @@ sub read {
     while (!$crs) {
 	print "Reading loop entered\n" if $object->{"debug"};
 	$cnt=0;
-	while (!($len=$object->checkpending)) {
+	while (!($len=$object->checkpending) && !length($object->{"buffer"})) {
 	    return "" if $object->nowait;
 	    sleep($object->interval);               # maybe should be adjusted?
 	    if ($cnt++>$object->adjustafter) {
 		$cnt=0;
 		$object->interval($object->interval*10);
 	    }
+	}
+	if (length($object->{"buffer"})) {
+	    # this means the file was reset AND a tail -n was active
+	    $crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
+	    next;
 	}
 	sysread($object->{handle},$object->{"buffer"},
 		$len,length($object->{"buffer"}));
@@ -345,10 +417,26 @@ sub read {
 	$object->interval(($tmp-($object->{lastread}))/$crs);
 	$object->{lastread}=$tmp;
     }
-    my $str=substr($object->{"buffer"},0,1+index($object->{"buffer"},"\n"));
-    $object->{"buffer"}=substr($object->{"buffer"},
-			       1+index($object->{"buffer"},"\n"));
-    return $str;
+    unless (wantarray) {
+	my $str=substr($object->{"buffer"},0,
+		       1+index($object->{"buffer"},"\n"));
+	$object->{"buffer"}=substr($object->{"buffer"},
+				   1+index($object->{"buffer"},"\n"));
+	return $str;
+    } else {
+#	my @str=split(/\n/,$object->{"buffer"});
+#	$object->{"buffer"}="";
+#	return(@str);
+	my @str;
+	while (index($object->{"buffer"},"\n")>-1) {
+	    push(@str,substr($object->{"buffer"},0,
+			     1+index($object->{"buffer"},"\n")));
+	    $object->{"buffer"}=substr($object->{"buffer"},
+				       1+index($object->{"buffer"},"\n"));
+
+	}
+	return @str;
+    }
 }
 
 1;
@@ -373,6 +461,16 @@ File::Tail - Perl extension for reading from continously updated files
       print "$line";
   }
 
+OR, you could use tie (additional parameters can be passed with the name, or 
+can be set using $ref):
+
+    use File::Tail;
+    my $ref=tie *FH,"File::Tail",(name=>$name);
+    while (<FH>) {
+        print "$_";
+    }
+}
+
 Note that the above script will never exit. If there is nothing being written
 to the file, it will simply block.
 
@@ -390,6 +488,14 @@ time before new data will be written. When there is no new data to read,
 C<File::Tail> sleeps for that number of seconds. Thereafter, the waiting 
 time is recomputed dynamicaly. Note that C<File::Tail> never sleeps for
 more than the number of seconds set by C<maxinterval>.
+
+If the file does not get altered for a while, C<File::Tail> gets suspicious 
+and startschecking if the file was truncated, or moved and recreated. If 
+anything like that had happened, C<File::Tail> will quietly reopen the file,
+and continue reading. The only way to affect what happens on reopen is by 
+setting the reset_tail parameter (see below). The effect of this is that
+the scripts need not be aware when the logfiles were rotated, they will
+just quietly work on.
 
 Note that the sleep and time used are from Time::HiRes, so this module
 should do the right thing even if the time to sleep is less than one second.
@@ -452,6 +558,26 @@ If you want to read tails from multiple files, use select.
     Do not complain if the file doesn't exist when it is first opened or
 when it is to be reopened. (File may be reopened after resetafter seconds 
 have passed since last data was found.)
+
+=item tail
+    When first started, read and return C<n> lines from the file. If C<n>
+is zero, start at the end of file. If C<n> is negative, return the whole file.
+    Default is C<0>.
+
+=item reset_tail
+    Same as tail, but applies after reset. (i.e. after the file has been
+automaticaly closed and reopened). Defaults to C<-1>, i.e. does not skip 
+any information present in the file when it first checks it.
+
+   Why would you want it otherwise? I've seen files which have been cycled
+like this:
+   grep -v lastmonth log >newlog
+   mv log archive/lastmonth
+   mv newlog log
+  
+   Obviously, if this happens and you have reset_tail set to c<-1>, you will
+suddenly get a whole bunch of lines - lines you already saw. So in this case, 
+reset_tail should probably be set to a small positive number or even C<0>.
 
 =item debug
 

@@ -49,7 +49,8 @@ unless ($version) {
 # Tie without predeclaring the filehandle
 #
     my $ref=tie *FH,"File::Tail",(name=>$name,debug=>$debug,
-				  interval=>1,maxinterval=>5, 
+				  interval=>1,maxinterval=>5,
+				  tail=>5,
 				  adjustafter=>20,errmode=>"return");
     while (<FH>) {
 	print "$_";

@@ -14,7 +14,16 @@ Revision history for Perl extension File::Tail.
         - implemented tied interface
 	- implemented non-blocking read (against my better judgement)
         - implemented more flexible error handling a-la Net::Telnet
+        - implemented ignore_nonexistat
 
-Release of 0.7 was delayed because I wanted to see if Tied Handle handling
-will include select in 5.005. After two people sent me their tied interfaces, 
-I figured maybe it was time to release it before implementing select :-)
+        Release of 0.7 was delayed because I wanted to see if Tied
+        Handle handling will include select in 5.005. After two people
+        sent me their tied interfaces, I figured maybe it was time to
+        release it before implementing select :-)
+
+0.8  
+	implemented wantarray handling in READLINE
+	implemented some tests for make test
+        documented the tied interface in synopsis (Duh!)
+        - implemented tail -n functionality
+

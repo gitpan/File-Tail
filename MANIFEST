@@ -5,3 +5,4 @@ Tail.pm
 test.pl
 logwatch
 README
+t/10open.t
