@@ -1,0 +1,33 @@
+The File::Tail package is designed for reading files which are continously
+appended to (the name comes from the tail -f directive). Usualy such files are
+logfiles of some description.
+
+The package tries not to busy wait on the file, dynamicaly calcultaing 
+how long it should wait before it pays to try reading the file again.
+
+The package should handle normal log truncations ("close; move; open"
+or "cat /dev/null >file") transparently. 
+
+Currently this package requires Time::HiRes, because it often needs to sleep
+for less than one second. (I don't beleive one should busy wait on a file
+just because it gets more than one line/second).
+
+The file logwatch is a simple example of use. Try it with 
+./logwatch /var/log/syslog 1 if you want to see how File::Tail works.
+
+A future version of this module will probably return a tied filehandle.
+
+
+To build this module, enter
+perl Makefile.PL
+make
+make test
+make install
+
+
+If you have any problems, contact me at matija.grabnar@arnes.si
+
+Copyright (c) 1997 Matija Grabnar. 
+
+All rights reserved. This program is free software; you can
+redistribute it and/or modify it under the same terms as Perl itself. 
