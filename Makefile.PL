@@ -40,9 +40,43 @@ chk_version("Time::HiRes",1.12) or
 	 "version 1.12 or later, \n".
 	 "available from CPAN/modules/by-module/Time/Time-HiRes-x.x.tar.gz\n");
 
+my $i=0;
+my $debug=0; 
+while (defined($ARGV[$i])) {
+    if ($ARGV[$i]=~/LOGIT/) {
+       splice(@ARGV,$i,1);
+       $debug=1;
+    }
+    $i++;
+}
+
+
+if ($debug) {
+    print "\nFile::Tail will be installed with debugging information\n\n";
+    open(INP,"<Tail.pm.debug");
+    open(OUT,">Tail.pm");
+    while (<INP>) {
+       print OUT $_;
+    }
+    close(INP);
+    close(OUT);
+} else {
+    print "\nFile::Tail will be installed without debugging information.\n";
+    print "This information isn't usefull unless you intend to tinker \n";
+    print "with the code. To install with debugging enabled, use:\n";
+    print "perl Makefile.PL LOGIT\n";
+    open(INP,"<Tail.pm.debug");
+    open(OUT,">Tail.pm");
+    while (<INP>) {
+       print OUT $_ unless m/logit\(/;
+    }
+    close(INP);
+    close(OUT);   
+}
+
 WriteMakefile(
 	      'NAME'	=> 'File::Tail',
-	      'VERSION_FROM' => 'Tail.pm', # finds $VERSION
+	      'VERSION_FROM' => 'Tail.pm.debug', # finds $VERSION
 #	      'NOECHO' => "",
 	      'PREREQ_PM' => \%prereq
 );

@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.91';
+$VERSION = '0.94';
 
 
 # Preloaded methods go here.
@@ -20,9 +20,9 @@ use File::stat;
 use Carp;
 use Time::HiRes qw ( time sleep ); #import hires microsecond timers
 
-sub SEEK_SET {0;}
-sub SEEK_START {1;}
-sub SEEK_END {2;}
+sub SEEK_SET   () {0;}
+sub SEEK_CUR () {1;}
+sub SEEK_END   () {2;}
 
 
 sub interval {
@@ -38,9 +38,12 @@ sub interval {
 sub logit {
     my $object=shift;
     my @call=caller(1);
-    print STDERR 
+    print # STDERR 
 #	time()." ".
-	    $call[3]." ".$object->{"input"}." ".join("",@_)."\n"
+	"\033[7m".
+	    $call[3]." ".$object->{"input"}." ".join("",@_).
+		"\033[0m".
+		    "\n"
 	if $object->debug;
 }
 
@@ -208,7 +211,7 @@ sub DESTROY {
   my($this) = shift(@_);
   close($this->{"handle"});
   undef $this;
-  return undef;
+  return;
 }
 
 sub CLOSE {
@@ -227,7 +230,7 @@ sub new {
     } else {
 	if (($#_ % 2) != 1) {
 	    croak "Odd number of parameters for new";
-	    return undef;
+	    return;
 	}
 	%params=@_;
     }
@@ -249,6 +252,7 @@ sub new {
 			 ($object->maxinterval*$object->adjustafter));
     $object->{"debug"}=($params{'debug'} || 0);
     $object->{"tail"}=($params{'tail'} || 0);
+    $object->{"maxbuf"}=($params{'maxbuf'} || 16384);
     if (defined $params{'reset_tail'}) {
         $object->{"reset_tail"} = $params{'reset_tail'};
     } else {
@@ -258,6 +262,8 @@ sub new {
     $object->{"lastread"}=0;
     $object->{"sleepcount"}=0;
     $object->{"lastcheck"}=0;
+    $object->{"lastreset"}=0;
+    $object->{"nextcheck"}=time();
     if ($object->{"method"} eq "tail") {
 	$object->reset_pointers;
     }
@@ -266,12 +272,15 @@ sub new {
 
 sub position {
     my $object=shift;
+    $object->{"endpos"}=sysseek($object->{handle},0,SEEK_END);
     unless ($object->{"tail"}) {
 	$object->logit("Start reading at end of file");
-	$object->{curpos}=sysseek($object->{handle},0,SEEK_END);
+	$object->{endpos}=$object->{curpos}=
+	    sysseek($object->{handle},0,SEEK_END);
     } elsif ($object->{"tail"}<0) {
 	$object->logit(" Start reading at start of file");
-	$object->{curpos}=sysseek($object->{handle},0,SEEK_START);
+	$object->{endpos}=sysseek($object->{handle},0,SEEK_END);
+	$object->{curpos}=sysseek($object->{handle},0,SEEK_SET);
     } else {
 	$object->logit(" Return ".$object->{"tail"}." lines."); 
 	my $crs=0;
@@ -285,9 +294,12 @@ sub position {
 	    $object->{curpos}=sysseek($object->{handle},-$calclen,SEEK_END);
 	    sysread($object->{handle},$object->{"buffer"},
 		    $calclen);
+	    $object->{curpos}=sysseek($object->{handle},0,SEEK_CUR);
 	    $crs=$object->{"buffer"}=~tr/\n//;
 	    last if ($calclen>=$maxlen);
 	}
+	$object->{curpos}=sysseek($object->{handle},0,SEEK_CUR);
+	$object->{endpos}=sysseek($object->{handle},0,SEEK_END);
 	if ($crs>$object->{"tail"}) {
 	    my $toskip=$crs-$object->{"tail"};
 	    my $pos;
@@ -303,7 +315,8 @@ sub position {
 
 sub reset_pointers {
     my $object=shift @_;
-    $object->logit("after ".(time()-$object->{lastread})."s\n");
+    $object->{lastreset} = time();
+    $object->logit("after ".($object->{lastreset}-$object->{lastcheck})."s");
 
     my $st;
 
@@ -315,7 +328,7 @@ sub reset_pointers {
 	    return;
 	}
 	$object->error("Error opening ".$object->input.": $!");
-	return undef;
+	return;
     }
     
     if (defined($oldhandle)) {
@@ -333,24 +346,27 @@ sub reset_pointers {
 	if (($st->mtime<int($object->{lastread}))) {
 	    $object->logit(" File not modified since last read. Reset skipped.");
 	    $object->logit("mtime:",$st->mtime," lastread: ",$object->{lastread});
+ 	    $object->{lastread} = $st->mtime; # repair fraction trouble
 	    return;
 	} elsif (($st->mtime==int($object->{lastread})) && 
 		 $st->size==$object->{"curpos"}) {
 	    $object->logit(" File not modified since last read. Reset skipped.");
 	    $object->logit("mtime:",$st->mtime," lastread: ",$object->{lastread});
+ 	    $object->{lastread} = $st->mtime; # repair fraction trouble
 	    return;
 
 	}
 	$object->logit("reseting file mtime:",$st->mtime," lastread: ",$object->{lastread}," size=",$st->size," read position=",$object->{"curpos"});
 	$object->{handle}=$newhandle;
 	$object->position;
+#	$object->{lastread} = $st->mtime; # repair fraction trouble
 	close($oldhandle);
     } else {                  # This is the first time we are opening this file
 	$object->logit(" First opening of file");
 	$st=stat($newhandle);
 	$object->{handle}=$newhandle;
 	$object->position;
-	$object->{lastread}=$st->mtime; # for better estimate on initial read
+#	$object->{lastread}=$st->mtime; # for better estimate on initial read
     }
     
 }
@@ -359,6 +375,7 @@ sub reset_pointers {
 sub checkpending {
    my $object=shift @_;
 
+   my $old_lastcheck = $object->{lastcheck};
    $object->{"lastcheck"}=time;
    unless ($object->{handle}) {
        $object->logit(" Trying to find previously nonexistant file");
@@ -368,23 +385,25 @@ sub checkpending {
 	   return 0;
        }
    }
-   $object->logit("position = ".$object->{curpos}." interval = "
-	 .$object->interval);
+   $object->logit("position = ".$object->{curpos}." interval = ".$object->interval);
    
-   my $endpos=sysseek($object->{handle},0,SEEK_END);
-   if ($endpos<$object->{curpos}) { 
-       $object->{curpos}=0;
-   } elsif (($object->{curpos}==$endpos) 
-	       && (time()-$object->{'lastread'})>$object->{'resetafter'}) {
+   $object->{"endpos"}=sysseek($object->{handle},0,SEEK_END);
+   $object->logit("endposition = ".$object->{curpos});
+   if ($object->{"endpos"}<$object->{curpos}) {  # file was truncated
+       logit($object,"File was truncated - reading from start");
+       $object->{curpos}=sysseek($object->{handle},0,SEEK_SET);
+   } elsif (($object->{curpos}==$object->{"endpos"}) 
+	       && (time()-$object->{lastreset})>$object->{'resetafter'}) {
        $object->reset_pointers;
-       $endpos=sysseek($object->{handle},0,SEEK_END);
+       $object->{"endpos"}=sysseek($object->{handle},0,SEEK_END);
    }
 
-   if ($endpos-$object->{curpos}) {
+   if ($object->{"endpos"}-$object->{curpos}) {
        sysseek($object->{handle},$object->{curpos},SEEK_SET);
+       readin($object,$object->{"endpos"}-$object->{curpos});
    }
-   $object->logit("Returning length is ".($endpos-$object->{curpos}));
-   return ($endpos-$object->{curpos});
+   $object->logit("Returning length is ".($object->{"endpos"}-$object->{curpos}));
+   return ($object->{"endpos"}-$object->{curpos});
 }
 
 sub predict {
@@ -394,9 +413,8 @@ sub predict {
     $object->logit("called by ".join(" ",splice(@call,0,4)));
     $object->logit("predict - $crs waiting in buffer");
     return 0 if $crs;
-    my $ttw=($object->{"lastcheck"}+$object->{"interval"})-time();
-    $object->logit("- lastcheck:".$object->{"lastcheck"}."interval="
-	  .$object->{"interval"});
+    my $ttw=$object->{"nextcheck"}-time();
+    $object->logit("- lastcheck:".$object->{"lastcheck"}."interval=".$object->{"interval"});
     $object->logit("- ttw is $ttw");
     return $ttw if $ttw>0;
     if (my $len=$object->checkpending) {
@@ -408,8 +426,8 @@ sub predict {
 	$object->interval($object->interval*10);
     }
     $object->{"sleepcount"}++;
-    $object->logit("- checkpending returned 0 - (".$object->interval.",".
-	  $object->{"sleepcount"}.")");
+    $object->logit("- checkpending returned 0 - (".$object->interval.",".$object->{"sleepcount"}.")");
+    $object->{"nextcheck"}=time()+$object->interval;
     return ($object->interval);
 }
 
@@ -419,7 +437,7 @@ sub bitprint {
 }
 
 sub select {
-    my $object=shift @_; # if ref($_[0]);
+    my $object=shift @_  if ref($_[0]);
     my ($timeout,@fds)=splice(@_,3);
     $object=$fds[0] unless defined($object);
     my ($savein,$saveout,$saveerr)=@_;
@@ -458,7 +476,7 @@ sub select {
 	    $nfound++ unless $val;
 	    $object->logit("minpred calc 2 ($minpred,$val)");
 	    $minpred=$val if $minpred>$val;
-	    push(@retarr,$_);
+	    push(@retarr,$_) unless $val;
 	}
     }
     if (wantarray) {
@@ -471,23 +489,25 @@ sub select {
 sub readin {
     my $crs;
     my ($object,$len)=@_;
+    logit($object,"Readin, len=$len");
     if (length($object->{"buffer"})) {
 	# this means the file was reset AND a tail -n was active
 	$crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
+	logit($object,"buffer already contains $crs lines ",length($object->{"buffer"})," bytes");
 	return $crs if $crs;
     }
+    $len=$object->{"maxbuf"} if ($len>$object->{"maxbuf"});
+    logit($object,"Preparing to read in $len bytes");
     my $nlen=$len;
     while ($nlen>0) {
 	$len=sysread($object->{handle},$object->{"buffer"},
 		     $nlen,length($object->{"buffer"}));
 	$nlen=$nlen-$len;
     }
-    $object->{curpos}=sysseek($object->{handle},
-			      $object->{curpos}+$len,SEEK_SET);
+    $object->{curpos}=sysseek($object->{handle},0,SEEK_CUR);
     
     $crs=$object->{"buffer"}=~tr/\n//;
-    $object->logit(" Got something ($len). there are now $crs newlines in buffer (".
-		   length($object->{"buffer"})." bytes)");
+    $object->logit(" Got something ($len). there are now $crs newlines in buffer (".length($object->{"buffer"})." bytes)");
     
     if ($crs) {
 	my $tmp=time; 
@@ -500,21 +520,31 @@ sub readin {
 sub read {
     my $object=shift @_;
     my $len;
-    my $crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
-    $object->logit("- $crs waiting in buffer");
-    while (!$crs) {
+    my $pending=$object->{"endpos"}-$object->{"curpos"};
+    $object->logit("- $pending bytes unread in file");
+    my $crs=$object->{"buffer"}=~tr/\n//;
+    while (!$pending && !$crs) {
 	$object->logit(" Reading loop entered");
 	$object->{"sleepcount"}=0;
-	while (!($len=$object->checkpending) && !length($object->{"buffer"})) {
-	    return "" if $object->nowait;
-	    sleep($object->interval);               # maybe should be adjusted?
-	    if ($object->{"sleepcount"}++>$object->adjustafter) {
-		$object->{"sleepcount"}=0;
-		$object->interval($object->interval*10);
+	while ($object->predict) {
+	    if ($object->nowait) {
+		if (wantarray) {
+		    return ();
+		} else {
+		    return "";
+		}
 	    }
+	    sleep($object->interval);
 	}
-	next if $crs=readin($object,$len);
+	$pending=$object->{"endpos"}-$object->{"curpos"};
+	$crs=$object->{"buffer"}=~tr/\n//;
     }
+    
+    if (!length($object->{"buffer"}) || index($object->{"buffer"},"\n")<0) {
+	logit($object,"reading loop finished. ($pending pending) Calling readin");
+	readin($object,$pending);
+    }
+    logit($object,"Buffer now contains ",length($object->{"buffer"})," bytes");
     unless (wantarray) {
 	my $str=substr($object->{"buffer"},0,
 		       1+index($object->{"buffer"},"\n"));
@@ -535,6 +565,7 @@ sub read {
 }
 
 1;
+
 __END__
 
 =head1 NAME
@@ -649,6 +680,17 @@ The number of seconds after last change when C<File::Tail> decides
 the file may have been closed and reopened. The default is 
 adjustafter*maxinterval.
 
+=item maxbuf
+
+The maximum size of the internal buffer. When File::Tail
+suddenly found an enormous ammount information in the file
+(for instance if the retry parameters were set to very
+infrequent checking and the file was rotated), File::Tail
+sometimes slurped way too much file into memory.  This sets
+the maximum size of File::Tail's buffer.
+
+Default value is 16384 (bytes).
+
 =item nowait
 
 Does not block on read, but returns an empty string if there is nothing
@@ -659,30 +701,38 @@ If you want to read tails from multiple files, use select.
 
 =item ignore_nonexistant
 
-    Do not complain if the file doesn't exist when it is first opened or
-when it is to be reopened. (File may be reopened after resetafter seconds 
-have passed since last data was found.)
+    Do not complain if the file doesn't exist when it is first 
+opened or when it is to be reopened. (File may be reopened after 
+resetafter seconds have passed since last data was found.)
 
 =item tail
-    When first started, read and return C<n> lines from the file. If C<n>
-is zero, start at the end of file. If C<n> is negative, return the whole file.
+
+    When first started, read and return C<n> lines from the file. 
+If C<n> is zero, start at the end of file. If C<n> is negative, 
+return the whole file.
+
     Default is C<0>.
 
 =item reset_tail
-    Same as tail, but applies after reset. (i.e. after the file has been
-automaticaly closed and reopened). Defaults to C<-1>, i.e. does not skip 
-any information present in the file when it first checks it. 
 
-   Why would you want it otherwise? I've seen files which have been cycled
-like this:
-   grep -v lastmonth log >newlog
-   mv log archive/lastmonth
-   mv newlog log
-   kill -HUP logger
-  
-   Obviously, if this happens and you have reset_tail set to c<-1>, you will
-suddenly get a whole bunch of lines - lines you already saw. So in this case, 
-reset_tail should probably be set to a small positive number or even C<0>.
+    Same as tail, but applies after reset. (i.e. after the
+file has been automaticaly closed and reopened). Defaults to
+C<-1>, i.e. does not skip any information present in the
+file when it first checks it.
+
+   Why would you want it otherwise? I've seen files which
+have been cycled like this:
+
+   grep -v lastmonth log >newlog 
+   mv log archive/lastmonth 
+   mv newlog log 
+   kill -HUP logger 
+
+
+Obviously, if this happens and you have reset_tail set to
+c<-1>, you will suddenly get a whole bunch of lines - lines
+you already saw. So in this case, reset_tail should probably
+be set to a small positive number or even C<0>.
 
 =item debug
 
@@ -762,9 +812,7 @@ Matija Grabnar, matija.grabnar@arnes.si
 =head1 SEE ALSO
 
 perl(1), tail (1), 
-MRTG 
-
-(http://ee-staff.ethz.ch/~oetiker/webtools/mrtg/mrtg.html)
+MRTG (http://ee-staff.ethz.ch/~oetiker/webtools/mrtg/mrtg.html)
 
 =cut
 

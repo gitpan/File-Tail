@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-BEGIN { unshift @INC,"./File/Tail/blib/lib/";}
+BEGIN { unshift @INC,"./blib/lib/";}
 use File::Tail 0.8;
 
 $name="/var/log/syslog" unless $name=shift @ARGV;

@@ -1,7 +1,7 @@
 Changes
 MANIFEST
 Makefile.PL
-Tail.pm
+Tail.pm.debug
 test.pl
 logwatch
 README

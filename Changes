@@ -49,3 +49,21 @@ Revision history for Perl extension File::Tail.
         nasty select bug discovered by "Weeber, Steve" <steve.weeber@qwest.net>
         select can now also be called as File::Tail::select, as long as there 
          is at least one tail object given.
+
+0.92	Thu Oct 21 11:28:57 MET DST 1999
+	Blair Zajac sent a patch to fix some problems when returning an empty 
+        string when the request was for an array.
+        Gerben Wierda <Gerben_Wierda@RnA.nl> sent a patch that should fix 
+	problems with files that don't get updated for a while (a file could
+	accidentaly be read the whole way through again under some 
+	circumstances)
+
+0.94 	Wed Nov  3 12:46:29 MET 1999
+        Some changes in the way internal data caching is done - primarily 
+           support for cases where you shouldn't keep all the pending lines in
+    	   memory.
+        logit calls are now stripped by default before the module is installed.
+           If you want to patch File::Tail now, you must edit Tail.pm.debug,
+           the do a perl Makefile.PL which will create a Tail.pm
+	Select returned ALL handles instead of just the ones with input ready.
+
