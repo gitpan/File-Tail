@@ -5,11 +5,11 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
 
 require Exporter;
 
-@ISA = qw(Exporter AutoLoader);
+@ISA = qw(Exporter);
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.98';
+$VERSION = '0.99.1';
 
 
 # Preloaded methods go here.
@@ -267,6 +267,8 @@ sub new {
     if ($object->{"method"} eq "tail") {
 	$object->reset_pointers;
     }
+#    $object->{curpos}=0;        # ADDED 25May01: undef warnings when
+#    $object->{endpos}=0;        #   starting up on a nonexistant file
     return $object;
 }
 
@@ -335,10 +337,10 @@ sub reset_pointers {
 
     unless (open($newhandle,"<".$object->input)) {
 	if ($object->{'ignore_nonexistant'}) {
-            # If we have an oldhandle, leave endpos and curpos to what they 
-	    # were, since oldhandle will still be the "current" handle elsewhere, 
-	    # eg, checkpending.  This also allows tailing a file which is removed 
-	    # but still being written to.
+         # If we have an oldhandle, leave endpos and curpos to what they 
+         # were, since oldhandle will still be the "current" handle elsewhere, 
+         # eg, checkpending.  This also allows tailing a file which is removed 
+         # but still being written to.
             if (!$oldhandle) {
                 $object->{'endpos'}=0;
                 $object->{'curpos'}=0;
@@ -346,6 +348,8 @@ sub reset_pointers {
 	    return;
 	}
 	$object->error("Error opening ".$object->input.": $!");
+	$object->{'endpos'}=0 unless defined($object->{'endpos'});
+	$object->{'curpos'}=0 unless defined($object->{'curpos'});
 	return;
     }
     binmode($newhandle);
@@ -401,7 +405,7 @@ sub checkpending {
    if ($object->{"endpos"}<$object->{curpos}) {  # file was truncated
        $object->position;
    } elsif (($object->{curpos}==$object->{"endpos"}) 
-	       && (time()-$object->{lastreset})>$object->{'resetafter'}) {
+	       && (time()-$object->{lastread})>$object->{'resetafter'}) {
        $object->reset_pointers;
        $object->{"endpos"}=sysseek($object->{handle},0,SEEK_END);
    }
@@ -504,7 +508,8 @@ sub readin {
     $crs=$object->{"buffer"}=~tr/\n//;
     
     if ($crs) {
-	my $tmp=time; 
+	my $tmp=time;
+	$object->{lastread}=$tmp if $object->{lastread}>$tmp; #???
 	$object->interval(($tmp-($object->{lastread}))/$crs);
 	$object->{lastread}=$tmp;
     }
@@ -526,7 +531,7 @@ sub read {
 		    return "";
 		}
 	    }
-	    sleep($object->interval);
+	    sleep($object->interval) if ($object->interval>0);
 	}
 	$pending=$object->{"endpos"}-$object->{"curpos"};
 	$crs=$object->{"buffer"}=~m/\n/;
@@ -584,7 +589,7 @@ can be set using $ref):
     while (<FH>) {
         print "$_";
     }
-}
+
 
 Note that the above script will never exit. If there is nothing being written
 to the file, it will simply block.
@@ -763,12 +768,30 @@ input on normal filehandles and File::Tail filehandles. Of course, you may
 use it to simply read from more than one File::Tail filehandle at a time.
 
 
-For an example of usage, look at the script select_demo.
-
 Basicaly, you call File::Tail::select just as you would normal select,
 with fields for rbits, wbits and ebits, as well as a timeout, however, you 
 can tack any number of File::Tail objects (not File::Tail filehandles!) 
 to the end. 
+
+Usage example:
+
+ foreach (@ARGV) {
+     push(@files,File::Tail->new(name=>"$_",debug=>$debug));
+ }
+ while (1) {
+   ($nfound,$timeleft,@pending)=
+             File::Tail::select(undef,undef,undef,$timeout,@files);
+   unless ($nfound) {
+     # timeout - do something else here, if you need to
+   } else {
+     foreach (@pending) {
+        print $_->{"input"}." (".localtime(time).") ".$_->read;
+   }
+ }
+
+ #
+ # There is a more elaborate example in select_demo in the distribution.
+ #
 
 When you do this, File::Tail's select emulates normal select, with two 
 exceptions: 
@@ -787,7 +810,10 @@ or you can check each individual object with $object->predict. This returns
 the ammount of time (in fractional seconds) after which the handle expects
 input. If it returns 0, there is input waiting. There is no guarantee that
 there will be input waiting after the returned number of seconds has passed.
-However, File::Tail won't do any I/O on the file until that time has passed. 
+However, File::Tail won't do any I/O on the file until that time has passed.
+Note that the value of $timeleft may or may not be correct - that depends on 
+the underlying operating system (and it's select), so you're better off NOT
+relying on it. 
 
 Also note, if you are determining which files are ready for input by calling
 each individual predict, the C<$nfound> value may be invalid, because one
@@ -796,8 +822,11 @@ has returned and the time when you checked it.
 
 =head1 TO BE DONE
 
-Planned for 0.95-1.0: Using $/ instead of \n to
+Planned for 1.0: Using $/ instead of \n to
 separate "lines" (which should make it possible to read wtmp type files).
+Except that I discovered I have no need for that enhancement If you do, 
+feel free to send me the patches and I'll apply them - if I feel they don't
+add too much processing time.
 
 =head1 AUTHOR
 

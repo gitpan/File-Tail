@@ -9,3 +9,4 @@ README
 select_demo
 t/10open.t
 t/20tail.t
+META.yml                                 Module meta-data (added by MakeMaker)

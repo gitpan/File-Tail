@@ -83,3 +83,13 @@ Revision history for Perl extension File::Tail.
 
 0.98    David Pfitzner release - David send me 6 patches (some for bugs,
         others for inefficiencies, or lack of clarity in documents)
+
+0.99    "Lyle D. Brooks" <brooks@deseret.com> reported there were instances 
+        where interval was set to a negative value
+        Joe Smith <Joe.Smith@wcom.com> noted that one shouldn't declare
+        @ISA=qw(Autoloader) unless one is prepared to deal with it correctly.
+        Peter Allen <pgmppa@ibi.com> undef warnings when starting up on a 
+        nonexistant file
+	Alain Fauconnet <alain@ait.ac.th> and Benjamin Zwittnig <beni@arnes.si>
+        provided test cases which helped me chase down another two cases where 
+        File::Tail would spontaneously read too much.
