@@ -15,7 +15,10 @@ just because it gets more than one line/second).
 The file logwatch is a simple example of use. Try it with 
 ./logwatch /var/log/syslog 1 if you want to see how File::Tail works.
 
-A future version of this module will probably return a tied filehandle.
+This version now returns a tied filehandle, but it can also be used as 
+a normal object.
+
+A future version will include tail -n functionality and a select equivalnet.
 
 
 To build this module, enter

@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.7';
+$VERSION = '0.70';
 
 
 # Preloaded methods go here.
@@ -149,6 +149,12 @@ sub resetafter {
     return $self->{resetafter};
 }
 
+sub ignore_nonexistant {
+    my $self=shift;
+    $self->{ignore_nonexistant}=shift if @_;
+    return $self->{ignore_nonexistant};
+}
+
 sub TIEHANDLE {
     my $ref=new(@_);
 }
@@ -215,6 +221,7 @@ sub new {
     $object->resetafter($params{'resetafter'} || 
 			 ($object->maxinterval*$object->adjustafter));
     $object->{"debug"}=($params{'debug'} || 0);
+    $object->{'ignore_nonexistant'}=($params{'ignore_nonexistant'} || 0);
     $object->{lastread}=0;
     if ($object->{"method"} eq "tail") {
 #	reset_pointers($object);
@@ -438,6 +445,13 @@ Does not block on read, but returns an empty string if there is nothing
 to read. DO NOT USE THIS unless you know what you are doing. If you 
 are using it in a loop, you probably DON'T know what you are doing.
 If you want to read tails from multiple files, use select.
+
+
+=item ignore_nonexistant
+
+    Do not complain if the file doesn't exist when it is first opened or
+when it is to be reopened. (File may be reopened after resetafter seconds 
+have passed since last data was found.)
 
 =item debug
 
