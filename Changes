@@ -30,3 +30,8 @@ Revision history for Perl extension File::Tail.
 0.81    Thu Oct 15 07:54:36 MET DST 1998
 	There was a bug in tail -n part, and the tail -n tests were missing
            from the distribution
+
+0.85	Wed Oct 28 15:44:47 MET 1998
+	The introduction of tail -n broke the handling of files where 
+	a line might be written incompletely (e.g. without the final \n). OOps!
+

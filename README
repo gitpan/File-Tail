@@ -18,7 +18,11 @@ The file logwatch is a simple example of use. Try it with
 This version now returns a tied filehandle, but it can also be used as 
 a normal object.
 
-A future version will include tail -n functionality and a select equivalnet.
+A feature added in 0.81 is tail -n functionality: you can demand to read the 
+last n lines, reading from the current end of file, or reading from the start
+of file.
+
+A future version will include a select equivalnet.
 
 
 To build this module, enter
@@ -34,3 +38,6 @@ Copyright (c) 1997 Matija Grabnar.
 
 All rights reserved. This program is free software; you can
 redistribute it and/or modify it under the same terms as Perl itself. 
+
+
+

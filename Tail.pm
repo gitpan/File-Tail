@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.81';
+$VERSION = '0.85';
 
 
 # Preloaded methods go here.
@@ -399,9 +399,9 @@ sub read {
 	if (length($object->{"buffer"})) {
 	    # this means the file was reset AND a tail -n was active
 	    $crs=$object->{"buffer"}=~tr/\n//; # Count newlines in buffer 
-	    next;
+	    next if $crs;
 	}
-	sysread($object->{handle},$object->{"buffer"},
+	$len=sysread($object->{handle},$object->{"buffer"},
 		$len,length($object->{"buffer"}));
 	$object->{curpos}=sysseek($object->{handle},
 				  $object->{curpos}+$len,SEEK_SET);
@@ -474,6 +474,9 @@ can be set using $ref):
 
 Note that the above script will never exit. If there is nothing being written
 to the file, it will simply block.
+
+You can find more synopsii in the file logwatch, which is included
+in the distribution.
 
 =head1 DESCRIPTION
 
@@ -568,13 +571,14 @@ is zero, start at the end of file. If C<n> is negative, return the whole file.
 =item reset_tail
     Same as tail, but applies after reset. (i.e. after the file has been
 automaticaly closed and reopened). Defaults to C<-1>, i.e. does not skip 
-any information present in the file when it first checks it.
+any information present in the file when it first checks it. 
 
    Why would you want it otherwise? I've seen files which have been cycled
 like this:
    grep -v lastmonth log >newlog
    mv log archive/lastmonth
    mv newlog log
+   kill -HUP logger
   
    Obviously, if this happens and you have reset_tail set to c<-1>, you will
 suddenly get a whole bunch of lines - lines you already saw. So in this case, 
