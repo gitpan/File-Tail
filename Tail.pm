@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.90';
+$VERSION = '0.91';
 
 
 # Preloaded methods go here.
@@ -341,6 +341,7 @@ sub reset_pointers {
 	    return;
 
 	}
+	$object->logit("reseting file mtime:",$st->mtime," lastread: ",$object->{lastread}," size=",$st->size," read position=",$object->{"curpos"});
 	$object->{handle}=$newhandle;
 	$object->position;
 	close($oldhandle);
@@ -395,7 +396,7 @@ sub predict {
     return 0 if $crs;
     my $ttw=($object->{"lastcheck"}+$object->{"interval"})-time();
     $object->logit("- lastcheck:".$object->{"lastcheck"}."interval="
-	  .$object->{interval});
+	  .$object->{"interval"});
     $object->logit("- ttw is $ttw");
     return $ttw if $ttw>0;
     if (my $len=$object->checkpending) {
@@ -412,9 +413,16 @@ sub predict {
     return ($object->interval);
 }
 
+sub bitprint {
+    return "undef" unless defined($_[0]);
+    return unpack("b*",$_[0]);
+}
+
 sub select {
-    my $object=shift @_; # the first objec is mostly irrelevant here...
+    my $object=shift @_; # if ref($_[0]);
     my ($timeout,@fds)=splice(@_,3);
+    $object=$fds[0] unless defined($object);
+    my ($savein,$saveout,$saveerr)=@_;
     my ($minpred,$mustreturn);
     if (defined($timeout)) {
 	$minpred=$timeout;
@@ -430,8 +438,15 @@ sub select {
     my ($nfound,$timeleft);
     my @retarr;
     while (defined($timeout)?(!$nfound && (time()<$mustreturn)):!$nfound) {
-	$object->logit("Calling select with a wait of $minpred");
+# Restore bitmaps in case we called select before
+	splice(@_,0,3,$savein,$saveout,$saveerr);
+
+	$object->logit("calling select(".bitprint($_[0]).",".bitprint($_[1]).",".bitprint($_[2]).",$minpred)\n");
+
 	($nfound,$timeleft)=select($_[0],$_[1],$_[2],$minpred);
+
+	$object->logit("returning ($nfound,$timeleft)=select(".bitprint($_[0]).",".bitprint($_[1]).",".bitprint($_[2]).",$minpred)\n");
+
 	if (defined($timeout)) {
 	    $minpred=$timeout;
 	} else {
@@ -701,9 +716,10 @@ ready, it blocks until there are.
 
 C<select> is intended to enable the programmer to simoultaneously wait for
 input on normal filehandles and File::Tail filehandles. Of course, you may 
-use to simply read from more than one File::Tail filehandle at a time.
+use it to simply read from more than one File::Tail filehandle at a time.
 
-Look at the script select_demo for usage.
+
+For an example of usage, look at the script select_demo.
 
 Basicaly, you call File::Tail::select just as you would normal select,
 with fields for rbits, wbits and ebits, as well as a timeout, however, you 

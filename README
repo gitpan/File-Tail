@@ -22,10 +22,13 @@ A feature added in 0.81 is tail -n functionality: you can demand to read the
 last n lines, reading from the current end of file, or reading from the start
 of file.
 
-Select was added in version 0.9. It allows you to simoultaneously read from
+Select was added in version 0.90. It allows you to simoultaneously read from
 several File::Tail objects at the same time, while also reading from pipes.
 This is a new implementation, so if you notice any bugs, please let me know.
-
+*************************************************************************
+Version 0.90 had a bug in "select" which caused it to sometimes overlook
+input waiting on ordinary files until there was input on tailed files.
+*************************************************************************
 NOTE: Select functionality is currently experimental. Consider this a public 
 beta. If you notice any new problems, let me know. I will also entertain 
 suggestions for changes in the select interface - but only until I release

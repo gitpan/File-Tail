@@ -43,3 +43,9 @@ Revision history for Perl extension File::Tail.
         logit now outputs the name of the calling routine and the name of the
            file the object refers to.
         select functionality added. 
+
+0.91	Tue Feb  2 17:14:27 MET 1999
+	another ambigous reference (fixed thanks to Peter Wirdemo <edtpewo@ratatosk.aom.ericsson.se>)
+        nasty select bug discovered by "Weeber, Steve" <steve.weeber@qwest.net>
+        select can now also be called as File::Tail::select, as long as there 
+         is at least one tail object given.

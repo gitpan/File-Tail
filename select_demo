@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 BEGIN { unshift @INC,"./blib/lib/";}
-use File::Tail 0.9;
+use File::Tail 0.91;
 
 #$name="/var/log/syslog" unless $name=shift @ARGV;
 $debug=shift @ARGV || 0;
@@ -14,7 +14,7 @@ foreach (@ARGV) {
 my $rin='';
 if ($version==0) {
     while (1) {
-	$nfound=$files[0]->select(undef,undef,undef,60,@files);
+	$nfound=File::Tail::select(undef,undef,undef,60,@files);
 	unless ($nfound) {
 	    my @ints;
 	    foreach(@files) {
@@ -29,7 +29,7 @@ if ($version==0) {
 } else {
     while (1) {
 	($nfound,$timeleft,@pending)=
-	    $files[0]->select(undef,undef,undef,60,@files);
+	    File::Tail::select(undef,undef,undef,60,@files);
 	unless ($nfound) {
 	    my @ints;
 	    foreach(@files) {
