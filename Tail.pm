@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.80';
+$VERSION = '0.81';
 
 
 # Preloaded methods go here.
@@ -270,6 +270,7 @@ sub position {
 	    my $avlen=length($object->{"buffer"})/($crs+1);
 	    $avlen=80 unless $avlen;
 	    my $calclen=$avlen*$object->{"tail"};
+	    $calclen+=1024 if $calclen<=length($object->{"buffer"});
 	    $calclen=$maxlen if $calclen>$maxlen;
 	    $object->{curpos}=sysseek($object->{handle},-$calclen,SEEK_END);
 	    sysread($object->{handle},$object->{"buffer"},

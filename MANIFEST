@@ -6,3 +6,4 @@ test.pl
 logwatch
 README
 t/10open.t
+t/20tail.t

@@ -21,9 +21,12 @@ Revision history for Perl extension File::Tail.
         sent me their tied interfaces, I figured maybe it was time to
         release it before implementing select :-)
 
-0.8  
+0.8     Wed Oct 14 19:29:30 MET DST 1998
 	implemented wantarray handling in READLINE
 	implemented some tests for make test
         documented the tied interface in synopsis (Duh!)
         - implemented tail -n functionality
 
+0.81    Thu Oct 15 07:54:36 MET DST 1998
+	There was a bug in tail -n part, and the tail -n tests were missing
+           from the distribution
