@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.99.1';
+$VERSION = '0.99.2';
 
 
 # Preloaded methods go here.
@@ -183,6 +183,12 @@ sub ignore_nonexistant {
     return $self->{ignore_nonexistant};
 }
 
+sub name_changes {
+    my $self=shift;
+    $self->{name_changes_callback}=shift if @_;
+    return $self->{name_changes_callback};
+}
+
 sub TIEHANDLE {
     my $ref=new(@_);
 }
@@ -252,7 +258,9 @@ sub new {
 			 ($object->maxinterval*$object->adjustafter));
     $object->{"debug"}=($params{'debug'} || 0);
     $object->{"tail"}=($params{'tail'} || 0);
+    $object->{"nowait"}=($params{'nowait'} || 0);
     $object->{"maxbuf"}=($params{'maxbuf'} || 16384);
+    $object->{"name_changes_callback"}=($params{'name_changes'} || undef);
     if (defined $params{'reset_tail'}) {
         $object->{"reset_tail"} = $params{'reset_tail'};
     } else {
@@ -335,7 +343,14 @@ sub reset_pointers {
     my $oldhandle=$object->{handle};
     my $newhandle=FileHandle->new;
 
-    unless (open($newhandle,"<".$object->input)) {
+    my $newname;
+    if ($oldhandle && $$object{'name_changes_callback'}) {
+	$newname=$$object{'name_changes_callback'}();
+    } else {
+	$newname=$object->input;
+    }
+
+    unless (open($newhandle,"<$newname")) {
 	if ($object->{'ignore_nonexistant'}) {
          # If we have an oldhandle, leave endpos and curpos to what they 
          # were, since oldhandle will still be the "current" handle elsewhere, 
@@ -501,6 +516,11 @@ sub readin {
     while ($nlen>0) {
 	$len=sysread($object->{handle},$object->{"buffer"},
 		     $nlen,length($object->{"buffer"}));
+	return 0 if $len==0; # Some busy filesystems return 0 sometimes, 
+                             # and never give anything more from then on if 
+                             # you don't give them time to rest. This return 
+                             # allows File::Tail to use the usual exponential 
+                             # backoff.
 	$nlen=$nlen-$len;
     }
     $object->{curpos}=sysseek($object->{handle},0,SEEK_CUR);
@@ -732,6 +752,17 @@ Obviously, if this happens and you have reset_tail set to
 c<-1>, you will suddenly get a whole bunch of lines - lines
 you already saw. So in this case, reset_tail should probably
 be set to a small positive number or even C<0>.
+
+=item name_changes
+
+Some logging systems change the name of the file 
+they are writing to, sometimes to include a date, sometimes a 
+sequence number, sometimes other, even more bizarre changes. 
+
+Instead of trying to implement various clever detection methods, 
+File::Tail will call the code reference defined in name_changes. The code reference should return the string which is the new name of the file to try opening.
+
+Note that if the file does not exist, File::Tail will report a fatal error (unless ignore_nonexistant has also been specified). 
 
 =item debug
 

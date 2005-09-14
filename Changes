@@ -93,3 +93,9 @@ Revision history for Perl extension File::Tail.
 	Alain Fauconnet <alain@ait.ac.th> and Benjamin Zwittnig <beni@arnes.si>
         provided test cases which helped me chase down another two cases where 
         File::Tail would spontaneously read too much.
+
+0.99.2  Some operating systems sometimes return 0 for sysread on busy files.
+        This should now be handled correctly.
+        nowait can now be specified at object creation.
+        A callback is called on every file rotation, which can be used for
+        files that change their names with time.

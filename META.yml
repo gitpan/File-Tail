@@ -1,7 +1,7 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         File-Tail
-version:      0.99.1
+version:      0.99.2
 version_from: Tail.pm.debug
 installdirs:  site
 requires:
