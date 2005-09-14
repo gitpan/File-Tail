@@ -99,3 +99,6 @@ Revision history for Perl extension File::Tail.
         nowait can now be specified at object creation.
         A callback is called on every file rotation, which can be used for
         files that change their names with time.
+
+0.99.3  Firefox crashed while I attempted upload to PAUSE, so I had to make
+        a new version just for that. Life is ridiculous.
