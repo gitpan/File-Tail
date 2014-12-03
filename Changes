@@ -102,3 +102,7 @@ Revision history for Perl extension File::Tail.
 
 0.99.3  Firefox crashed while I attempted upload to PAUSE, so I had to make
         a new version just for that. Life is ridiculous.
+
+1.0     Actually just two minor bug fixes (one of them in a test), but I no
+        longer see a point in not having a 1.0 version.
+        

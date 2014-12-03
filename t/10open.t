@@ -71,7 +71,7 @@ if ($t eq $teststring) {
 #
 # Test 6 - Read on moved and reopened file
 #
-system("mv $testname $testname-tmp");
+rename($testname, "$testname-tmp");
 open(TEST,">$testname");
 $teststring="This is yet another test string\n";
 print TEST $teststring;

@@ -9,7 +9,7 @@ require Exporter;
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-$VERSION = '0.99.3';
+$VERSION = '1.0';
 
 
 # Preloaded methods go here.
@@ -516,7 +516,7 @@ sub readin {
     while ($nlen>0) {
 	$len=sysread($object->{handle},$object->{"buffer"},
 		     $nlen,length($object->{"buffer"}));
-	return 0 if $len==0; # Some busy filesystems return 0 sometimes, 
+	last if $len==0; # Some busy filesystems return 0 sometimes, 
                              # and never give anything more from then on if 
                              # you don't give them time to rest. This return 
                              # allows File::Tail to use the usual exponential 
@@ -585,7 +585,7 @@ __END__
 
 =head1 NAME
 
-File::Tail - Perl extension for reading from continously updated files
+File::Tail - Perl extension for reading from continuously updated files
 
 =head1 SYNOPSIS
 
@@ -604,12 +604,11 @@ File::Tail - Perl extension for reading from continously updated files
 OR, you could use tie (additional parameters can be passed with the name, or 
 can be set using $ref):
 
-    use File::Tail;
-    my $ref=tie *FH,"File::Tail",(name=>$name);
-    while (<FH>) {
-        print "$_";
-    }
-
+  use File::Tail;
+  my $ref=tie *FH,"File::Tail",(name=>$name);
+  while (<FH>) {
+      print "$_";
+  }
 
 Note that the above script will never exit. If there is nothing being written
 to the file, it will simply block.
@@ -627,7 +626,7 @@ in the ditribution.
 =head1 DESCRIPTION
 
 The primary purpose of File::Tail is reading and analysing log files while
-they are being written, which is especialy usefull if you are monitoring
+they are being written, which is especialy useful if you are monitoring
 the logging process with a tool like Tobias Oetiker's MRTG.
 
 The module tries very hard NOT to "busy-wait" on a file that has little 
@@ -657,7 +656,7 @@ the methods.
 
 =head2 new ([ ARGS ]) 
 
-Creates a C<File::Tail>. If it has only one paramter, it is assumed to 
+Creates a C<File::Tail>. If it has only one parameter, it is assumed to
 be the filename. If the open fails, the module performs a croak. I
 am currently looking for a way to set $! and return undef. 
 
@@ -720,36 +719,35 @@ If you want to read tails from multiple files, use select.
 
 =item ignore_nonexistant
 
-    Do not complain if the file doesn't exist when it is first 
+Do not complain if the file doesn't exist when it is first
 opened or when it is to be reopened. (File may be reopened after 
 resetafter seconds have passed since last data was found.)
 
 =item tail
 
-    When first started, read and return C<n> lines from the file. 
+When first started, read and return C<n> lines from the file.
 If C<n> is zero, start at the end of file. If C<n> is negative, 
 return the whole file.
 
-    Default is C<0>.
+Default is C<0>.
 
 =item reset_tail
 
-    Same as tail, but applies after reset. (i.e. after the
-file has been automaticaly closed and reopened). Defaults to
+Same as tail, but applies after reset. (i.e. after the
+file has been automatically closed and reopened). Defaults to
 C<-1>, i.e. does not skip any information present in the
 file when it first checks it.
 
-   Why would you want it otherwise? I've seen files which
+Why would you want it otherwise? I've seen files which
 have been cycled like this:
 
-   grep -v lastmonth log >newlog 
-   mv log archive/lastmonth 
-   mv newlog log 
-   kill -HUP logger 
-
+  grep -v lastmonth log >newlog
+  mv log archive/lastmonth
+  mv newlog log
+  kill -HUP logger
 
 Obviously, if this happens and you have reset_tail set to
-c<-1>, you will suddenly get a whole bunch of lines - lines
+C<-1>, you will suddenly get a whole bunch of lines - lines
 you already saw. So in this case, reset_tail should probably
 be set to a small positive number or even C<0>.
 
@@ -777,9 +775,9 @@ is called with the error string as a parameter, an array with a code
 reference as the first parameter and other parameters to be passed to 
 handler subroutine, or one of the words:
 
-return  - ignore any error (just put error message in errmsg).
-warn    - output the error message but continue
-die     - display error message and exit
+ return  - ignore any error (just put error message in errmsg).
+ warn    - output the error message but continue
+ die     - display error message and exit
 
 Default is die.
 
